@@ -1,0 +1,1092 @@
+[
+    {
+        "id": "36be0e56b969acb8",
+        "type": "tab",
+        "label": "Flow 1",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "dc723c9cb941f693",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "name": "SETUP DATABASE",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "1",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 370,
+        "y": 80,
+        "wires": [
+            [
+                "dd4132ec216b2fde"
+            ]
+        ]
+    },
+    {
+        "id": "dd4132ec216b2fde",
+        "type": "postgresql",
+        "z": "36be0e56b969acb8",
+        "name": "PostgreSQL - CREATE TABLES",
+        "query": "DROP TABLE IF EXISTS MOVEMENTS;\nDROP TABLE IF EXISTS BOOKING;\nDROP TABLE IF EXISTS ROOM;\nDROP TABLE IF EXISTS ROLE;\n\nCREATE TABLE IF NOT EXISTS ROLE(\n  ROLE_ID SERIAL,\n  ROLE_NAME VARCHAR(55) NOT NULL,\n  PRIMARY KEY(ROLE_ID)\n);\n\nCREATE TABLE IF NOT EXISTS ROOM(\n  ROOM_ID SERIAL PRIMARY KEY,\n  ROOM_NAME VARCHAR(55) NOT NULL,\n  ROLE_ID SERIAL,\n  MAX_CAPACITY INT,\n  FOREIGN KEY(ROLE_ID) REFERENCES ROLE(ROLE_ID)\n);\n\nCREATE TABLE IF NOT EXISTS BOOKING(\n  BOOKING_ID INT,\n  ROOM_ID SERIAL,\n  START_TIME TIMESTAMP NOT NULL,\n  END_TIME TIMESTAMP NOT NULL,\n  ROLE_ID_BOOKED SERIAL,\n  FOREIGN KEY(ROLE_ID_BOOKED) REFERENCES ROLE(ROLE_ID),\n  FOREIGN KEY(ROOM_ID) REFERENCES ROOM(ROOM_ID)\n);\n\nCREATE TABLE IF NOT EXISTS MOVEMENTS(\n  MOVE_ID SERIAL,\n  BOOKING_ID INT,\n  ROLE_ID SERIAL,\n  ROOM_ID SERIAL,\n  TIME TIMESTAMP WITH TIME ZONE NOT NULL,\n  ENTERING BOOL NOT NULL,\n  PRIMARY KEY(MOVE_ID),\n  FOREIGN KEY(ROLE_ID) REFERENCES ROLE(ROLE_ID),\n  FOREIGN KEY(ROOM_ID) REFERENCES ROOM(ROOM_ID)\n);",
+        "postgreSQLConfig": "cfeb90dbe9c8f141",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 870,
+        "y": 80,
+        "wires": [
+            [
+                "bd4d01e942ee3ef4"
+            ]
+        ]
+    },
+    {
+        "id": "bd4d01e942ee3ef4",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "psql CREATE Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 860,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "71c4284866a6a65e",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino - Oncology Room 1",
+        "func": "var occupants = context.get('occupants') || [];\nvar enterTime = msg.payload[1];\nvar exitTime = msg.payload[2];\nvar role = flow.get('Role');\nflow.set('bookingID', (flow.get('bookingID') + 1) || 0);\nmsg.bookingID = flow.get('bookingID')\nvar timestamp = new Date(msg.timestamp).toISOString().slice(0, 19).replace('T', ' ');\n\n\nif (msg.event == true) {\n    if (exitTime >= enterTime) {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp +\". Occupancy: \" + occupants.length;\n    } else if (occupants.length > 0) {\n        if (occupants.indexOf(role) != -1) {\n            var index = occupants.indexOf(role);\n            occupants.splice(index, 1);\n        } else {\n        var rand = Math.floor(Math.random() * occupants.length)\n        var role = occupants[rand];\n        occupants.splice(rand, 1);\n        }\n        msg.entering = false;\n        msg.payload = role + \" exited at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    }\n\n    msg.room = 'Oncology Room 1';\n    msg.role = role;\n    msg.timestamp = timestamp;\n    context.set('occupants', occupants);\n} else {\n    msg.payload = [];\n}\n\nif (msg.payload.length != 0) {\n    return msg;\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 600,
+        "wires": [
+            [
+                "d23493f590d7512c",
+                "dd7ed04393051476"
+            ]
+        ]
+    },
+    {
+        "id": "d0689c83f3760577",
+        "type": "postgresql",
+        "z": "36be0e56b969acb8",
+        "name": "PostgreSQL - INSERT Query",
+        "query": "INSERT INTO ROLE VALUES (DEFAULT, 'Oncologist');\nINSERT INTO ROLE VALUES (DEFAULT, 'Neurologist');\nINSERT INTO ROLE VALUES (DEFAULT, 'Gastrologist');\nINSERT INTO ROLE VALUES (DEFAULT, 'Radiologist');\nINSERT INTO ROLE VALUES (DEFAULT, 'Other');\n\nINSERT INTO ROOM VALUES (DEFAULT, 'Oncology Room 1', (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = 'Oncologist'), 5);\nINSERT INTO ROOM VALUES (DEFAULT, 'Neurology Room 1', (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = 'Neurologist'), 5);\nINSERT INTO ROOM VALUES (DEFAULT, 'Gastrology Room 1', (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = 'Gastrologist'), 7);\nINSERT INTO ROOM VALUES (DEFAULT, 'Radiology Room 1', (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = 'Radiologist'), 4);\nINSERT INTO ROOM VALUES (DEFAULT, 'Radiology Room 2', (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = 'Radiologist'), 6);",
+        "postgreSQLConfig": "cfeb90dbe9c8f141",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 860,
+        "y": 240,
+        "wires": [
+            [
+                "e85f30558bb2eeb8"
+            ]
+        ]
+    },
+    {
+        "id": "e85f30558bb2eeb8",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "psql INSERT Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 860,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "4ead499be3f34447",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "name": "POPULATE DATABASE",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "4",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 380,
+        "y": 240,
+        "wires": [
+            [
+                "d0689c83f3760577"
+            ]
+        ]
+    },
+    {
+        "id": "9959616eb4c5a0a6",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "RFID Sensor",
+        "func": "var roles = ['Neurologist', 'Gastrologist', 'Radiologist', 'Other'];\n\nvar random_role = Math.random();\nvar event_occur = Math.random();\n\nif (event_occur < 0.50) {\n    msg.event = true;\n    if (random_role < 0.65) {\n        var role = 'Oncologist';\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    } else if (random_role > 0.65 && random_role < 0.85) {\n        var role = 'Other';\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    }\n    else {\n        var role = roles[Math.floor(Math.random() * roles.length)];\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    }\n} else {\n    msg.event = false;\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 590,
+        "y": 540,
+        "wires": [
+            [
+                "cbfce4e9a5b8083d"
+            ]
+        ]
+    },
+    {
+        "id": "823f2c21a9972f6f",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "name": "Timestamp",
+        "props": [
+            {
+                "p": "timestamp",
+                "v": "",
+                "vt": "date"
+            }
+        ],
+        "repeat": "3",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "1",
+        "topic": "",
+        "x": 350,
+        "y": 600,
+        "wires": [
+            [
+                "9959616eb4c5a0a6",
+                "52aec2dab8b8f8b2",
+                "f0d06374d550da99"
+            ]
+        ]
+    },
+    {
+        "id": "d23493f590d7512c",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino Payload Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 660,
+        "wires": []
+    },
+    {
+        "id": "cbfce4e9a5b8083d",
+        "type": "join",
+        "z": "36be0e56b969acb8",
+        "name": "Join Payloads",
+        "mode": "custom",
+        "build": "array",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": false,
+        "timeout": "",
+        "count": "3",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "",
+        "reduceFixup": "",
+        "x": 820,
+        "y": 600,
+        "wires": [
+            [
+                "71c4284866a6a65e"
+            ]
+        ]
+    },
+    {
+        "id": "52aec2dab8b8f8b2",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Outer Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 600,
+        "wires": [
+            [
+                "cbfce4e9a5b8083d"
+            ]
+        ]
+    },
+    {
+        "id": "f0d06374d550da99",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Inner Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 660,
+        "wires": [
+            [
+                "cbfce4e9a5b8083d"
+            ]
+        ]
+    },
+    {
+        "id": "b4ab15972fe4be9b",
+        "type": "postgresql",
+        "z": "36be0e56b969acb8",
+        "name": "PostgreSQL - INSERT Query",
+        "query": "INSERT INTO MOVEMENTS VALUES (\n    DEFAULT,\n    '{{msg.bookingID}}',\n    (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = '{{msg.role}}'),\n    (SELECT ROOM_ID FROM ROOM WHERE ROOM_NAME = '{{msg.room}}'),\n    '{{msg.timestamp}}',\n    '{{msg.entering}}');",
+        "postgreSQLConfig": "cfeb90dbe9c8f141",
+        "split": false,
+        "rowsPerMsg": "1",
+        "outputs": 1,
+        "x": 2060,
+        "y": 1040,
+        "wires": [
+            [
+                "330baa524d3ec322"
+            ]
+        ]
+    },
+    {
+        "id": "330baa524d3ec322",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "psql INSERT Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 2060,
+        "y": 1100,
+        "wires": []
+    },
+    {
+        "id": "dd7ed04393051476",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "IoT Gateway",
+        "func": "\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1690,
+        "y": 1040,
+        "wires": [
+            [
+                "b4ab15972fe4be9b"
+            ]
+        ]
+    },
+    {
+        "id": "347718d8466ed02c",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino - Neurology Room 1",
+        "func": "var occupants = context.get('occupants') || [];\nvar enterTime = msg.payload[1];\nvar exitTime = msg.payload[2];\nvar role = flow.get('Role');\nflow.set('bookingID', (flow.get('bookingID') + 1) || 0);\nmsg.bookingID = flow.get('bookingID')\nvar timestamp = new Date(msg.timestamp).toISOString().slice(0, 19).replace('T', ' ');\n\n\nif (msg.event == true) {\n    if (exitTime >= enterTime) {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else if (occupants.length > 0) {\n        if (occupants.indexOf(role) != -1) {\n            var index = occupants.indexOf(role);\n            occupants.splice(index, 1);\n        } else {\n            var rand = Math.floor(Math.random() * occupants.length)\n            var role = occupants[rand];\n            occupants.splice(rand, 1);\n        }\n        msg.entering = false;\n        msg.payload = role + \" exited at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    }\n\n    msg.room = 'Neurology Room 1';\n    msg.role = role;\n    msg.timestamp = timestamp;\n    context.set('occupants', occupants);\n} else {\n    msg.payload = [];\n}\n\nif (msg.payload.length != 0) {\n    return msg;\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 820,
+        "wires": [
+            [
+                "dd2459fd55030644",
+                "dd7ed04393051476"
+            ]
+        ]
+    },
+    {
+        "id": "3bafebbcccf894c4",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "RFID Sensor",
+        "func": "var roles = ['Oncologist', 'Gastrologist', 'Radiologist', 'Other'];\n\nvar random_role = Math.random();\nvar event_occur = Math.random();\n\nif (event_occur < 0.75) {\n    msg.event = true;\n    if (random_role < 0.80) {\n        var role = 'Neurologist';\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    } else {\n        var role = roles[Math.floor(Math.random() * roles.length)];\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    }\n} else {\n    msg.event = false;\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 590,
+        "y": 760,
+        "wires": [
+            [
+                "16dc5830dac1b075"
+            ]
+        ]
+    },
+    {
+        "id": "8df802b385fb1281",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "name": "Timestamp",
+        "props": [
+            {
+                "p": "timestamp",
+                "v": "",
+                "vt": "date"
+            }
+        ],
+        "repeat": "3",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "6",
+        "topic": "",
+        "x": 350,
+        "y": 820,
+        "wires": [
+            [
+                "3bafebbcccf894c4",
+                "8a5e0024e91cd805",
+                "ff2703addf2e9c68"
+            ]
+        ]
+    },
+    {
+        "id": "dd2459fd55030644",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino Payload Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 880,
+        "wires": []
+    },
+    {
+        "id": "16dc5830dac1b075",
+        "type": "join",
+        "z": "36be0e56b969acb8",
+        "name": "Join Payloads",
+        "mode": "custom",
+        "build": "array",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": false,
+        "timeout": "",
+        "count": "3",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "",
+        "reduceFixup": "",
+        "x": 820,
+        "y": 820,
+        "wires": [
+            [
+                "347718d8466ed02c"
+            ]
+        ]
+    },
+    {
+        "id": "8a5e0024e91cd805",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Outer Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 820,
+        "wires": [
+            [
+                "16dc5830dac1b075"
+            ]
+        ]
+    },
+    {
+        "id": "ff2703addf2e9c68",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Inner Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 880,
+        "wires": [
+            [
+                "16dc5830dac1b075"
+            ]
+        ]
+    },
+    {
+        "id": "32e61cc6e68add08",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino - Gastrology Room 1",
+        "func": "var occupants = context.get('occupants') || [];\nvar enterTime = msg.payload[1];\nvar exitTime = msg.payload[2];\nvar role = flow.get('Role');\nflow.set('bookingID', (flow.get('bookingID') + 1) || 0);\nmsg.bookingID = flow.get('bookingID')\nvar timestamp = new Date(msg.timestamp).toISOString().slice(0, 19).replace('T', ' ');\n\n\nif (msg.event == true) {\n    if (exitTime >= enterTime) {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else if (occupants.length > 0) {\n        if (occupants.indexOf(role) != -1) {\n            var index = occupants.indexOf(role);\n            occupants.splice(index, 1);\n        } else {\n            var rand = Math.floor(Math.random() * occupants.length)\n            var role = occupants[rand];\n            occupants.splice(rand, 1);\n        }\n        msg.entering = false;\n        msg.payload = role + \" exited at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    }\n\n    msg.room = 'Gastrology Room 1';\n    msg.role = role;\n    msg.timestamp = timestamp;\n    context.set('occupants', occupants);\n} else {\n    msg.payload = [];\n}\n\nif (msg.payload.length != 0) {\n    return msg;\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 1040,
+        "wires": [
+            [
+                "1948b042880ad4d1",
+                "dd7ed04393051476"
+            ]
+        ]
+    },
+    {
+        "id": "576c5cd4b340240b",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "RFID Sensor",
+        "func": "var roles = ['Oncologist', 'Neurologist', 'Radiologist', 'Other'];\n\nvar random_role = Math.random();\nvar event_occur = Math.random();\n\nif (event_occur < 0.75) {\n    msg.event = true;\n    if (random_role < 0.25) {\n        var role = 'Gastrologist';\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    } else {\n        var role = roles[Math.floor(Math.random() * roles.length)];\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    }\n} else {\n    msg.event = false;\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 590,
+        "y": 980,
+        "wires": [
+            [
+                "7b225ebb3c58244d"
+            ]
+        ]
+    },
+    {
+        "id": "0d9a013380f065df",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "d": true,
+        "name": "Timestamp",
+        "props": [
+            {
+                "p": "timestamp",
+                "v": "",
+                "vt": "date"
+            }
+        ],
+        "repeat": "3",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "7",
+        "topic": "",
+        "x": 350,
+        "y": 1040,
+        "wires": [
+            [
+                "576c5cd4b340240b",
+                "b22468c33d16cc9e",
+                "e855140fc98f0a8b"
+            ]
+        ]
+    },
+    {
+        "id": "1948b042880ad4d1",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino Payload Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 1100,
+        "wires": []
+    },
+    {
+        "id": "7b225ebb3c58244d",
+        "type": "join",
+        "z": "36be0e56b969acb8",
+        "name": "Join Payloads",
+        "mode": "custom",
+        "build": "array",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": false,
+        "timeout": "",
+        "count": "3",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "",
+        "reduceFixup": "",
+        "x": 820,
+        "y": 1040,
+        "wires": [
+            [
+                "32e61cc6e68add08"
+            ]
+        ]
+    },
+    {
+        "id": "b22468c33d16cc9e",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Outer Sensor",
+        "low": "0.4",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 1040,
+        "wires": [
+            [
+                "7b225ebb3c58244d"
+            ]
+        ]
+    },
+    {
+        "id": "e855140fc98f0a8b",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Inner Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 1100,
+        "wires": [
+            [
+                "7b225ebb3c58244d"
+            ]
+        ]
+    },
+    {
+        "id": "e845ee658fa53047",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino - Radiology Room 1",
+        "func": "var occupants = context.get('occupants') || [];\nvar enterTime = msg.payload[1];\nvar exitTime = msg.payload[2];\nvar role = flow.get('Role');\nflow.set('bookingID', (flow.get('bookingID') + 1) || 0);\nmsg.bookingID = flow.get('bookingID')\nvar timestamp = new Date(msg.timestamp).toISOString().slice(0, 19).replace('T', ' ');\n\n\nif (msg.event == true) {\n    if (exitTime >= enterTime) {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else if (occupants.length > 0) {\n        if (occupants.indexOf(role) != -1) {\n            var index = occupants.indexOf(role);\n            occupants.splice(index, 1);\n        } else {\n            var rand = Math.floor(Math.random() * occupants.length)\n            var role = occupants[rand];\n            occupants.splice(rand, 1);\n        }\n        msg.entering = false;\n        msg.payload = role + \" exited at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    }\n\n    msg.room = 'Radiology Room 1';\n    msg.role = role;\n    msg.timestamp = timestamp;\n    context.set('occupants', occupants);\n} else {\n    msg.payload = [];\n}\n\nif (msg.payload.length != 0) {\n    return msg;\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 1260,
+        "wires": [
+            [
+                "77ab745e543d4811",
+                "dd7ed04393051476"
+            ]
+        ]
+    },
+    {
+        "id": "941cb6bf7b33bbf1",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "RFID Sensor",
+        "func": "var roles = ['Oncologist', 'Gastrologist', 'Neurologist', 'Other'];\n\nvar random_role = Math.random();\nvar event_occur = Math.random();\n\nif (event_occur < 0.75) {\n    msg.event = true;\n    if (random_role < 0.65) {\n        var role = 'Radiologist';\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    } else {\n        var role = roles[Math.floor(Math.random() * roles.length)];\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    }\n} else {\n    msg.event = false;\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 590,
+        "y": 1200,
+        "wires": [
+            [
+                "6c583a01cde2c71e"
+            ]
+        ]
+    },
+    {
+        "id": "b565b1ee3f028869",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "d": true,
+        "name": "Timestamp",
+        "props": [
+            {
+                "p": "timestamp",
+                "v": "",
+                "vt": "date"
+            }
+        ],
+        "repeat": "3",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "8",
+        "topic": "",
+        "x": 350,
+        "y": 1260,
+        "wires": [
+            [
+                "941cb6bf7b33bbf1",
+                "9eb216a53896864e",
+                "f3ac4c87f2ef82d3"
+            ]
+        ]
+    },
+    {
+        "id": "77ab745e543d4811",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino Payload Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 1320,
+        "wires": []
+    },
+    {
+        "id": "6c583a01cde2c71e",
+        "type": "join",
+        "z": "36be0e56b969acb8",
+        "name": "Join Payloads",
+        "mode": "custom",
+        "build": "array",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": false,
+        "timeout": "",
+        "count": "3",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "",
+        "reduceFixup": "",
+        "x": 820,
+        "y": 1260,
+        "wires": [
+            [
+                "e845ee658fa53047"
+            ]
+        ]
+    },
+    {
+        "id": "9eb216a53896864e",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Outer Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 1260,
+        "wires": [
+            [
+                "6c583a01cde2c71e"
+            ]
+        ]
+    },
+    {
+        "id": "f3ac4c87f2ef82d3",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Inner Sensor",
+        "low": "0.2",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 1320,
+        "wires": [
+            [
+                "6c583a01cde2c71e"
+            ]
+        ]
+    },
+    {
+        "id": "6cf5d3174d6a412d",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino - Radiology Room 2",
+        "func": "var occupants = context.get('occupants') || [];\nvar enterTime = msg.payload[1];\nvar exitTime = msg.payload[2];\nvar role = flow.get('Role');\nflow.set('bookingID', (flow.get('bookingID') + 1) || 0);\nmsg.bookingID = flow.get('bookingID')\nvar timestamp = new Date(msg.timestamp).toISOString().slice(0, 19).replace('T', ' ');\n\n\nif (msg.event == true) {\n    if (exitTime >= enterTime) {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else if (occupants.length > 0) {\n        if (occupants.indexOf(role) != -1) {\n            var index = occupants.indexOf(role);\n            occupants.splice(index, 1);\n        } else {\n            var rand = Math.floor(Math.random() * occupants.length)\n            var role = occupants[rand];\n            occupants.splice(rand, 1);\n        }\n        msg.entering = false;\n        msg.payload = role + \" exited at \" + timestamp + \". Occupancy: \" + occupants.length;\n    } else {\n        msg.entering = true;\n        occupants.push(role)\n        msg.payload = role + \" entered at \" + timestamp + \". Occupancy: \" + occupants.length;\n    }\n\n    msg.room = 'Radiology Room 2';\n    msg.role = role;\n    msg.timestamp = timestamp;\n    context.set('occupants', occupants);\n} else {\n    msg.payload = [];\n}\n\nif (msg.payload.length != 0) {\n    return msg;\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 1480,
+        "wires": [
+            [
+                "f1ebb235be6618b6",
+                "dd7ed04393051476"
+            ]
+        ]
+    },
+    {
+        "id": "01599ed77c67c090",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "RFID Sensor",
+        "func": "var roles = ['Oncologist', 'Gastrologist', 'Gastrologist', 'Other'];\n\nvar random_role = Math.random();\nvar event_occur = Math.random();\n\nif (event_occur < 0.75) {\n    msg.event = true;\n    if (random_role < 0.75) {\n        var role = 'Radiologist';\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    } else {\n        var role = roles[Math.floor(Math.random() * roles.length)];\n        flow.set('Role', role);\n        msg.payload = \"Role: \" + role;\n    }\n} else {\n    msg.event = false;\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 590,
+        "y": 1420,
+        "wires": [
+            [
+                "80390a71d4fddf4e"
+            ]
+        ]
+    },
+    {
+        "id": "5da68c0a1d9fcfc8",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "d": true,
+        "name": "Timestamp",
+        "props": [
+            {
+                "p": "timestamp",
+                "v": "",
+                "vt": "date"
+            }
+        ],
+        "repeat": "3",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "9",
+        "topic": "",
+        "x": 350,
+        "y": 1480,
+        "wires": [
+            [
+                "01599ed77c67c090",
+                "b3d22b0c6477a951",
+                "a967b2d4480241c9"
+            ]
+        ]
+    },
+    {
+        "id": "f1ebb235be6618b6",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "Arduino Payload Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 1540,
+        "wires": []
+    },
+    {
+        "id": "80390a71d4fddf4e",
+        "type": "join",
+        "z": "36be0e56b969acb8",
+        "name": "Join Payloads",
+        "mode": "custom",
+        "build": "array",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": false,
+        "timeout": "",
+        "count": "3",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "",
+        "reduceFixup": "",
+        "x": 820,
+        "y": 1480,
+        "wires": [
+            [
+                "6cf5d3174d6a412d"
+            ]
+        ]
+    },
+    {
+        "id": "b3d22b0c6477a951",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Outer Sensor",
+        "low": "0.3",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 1480,
+        "wires": [
+            [
+                "80390a71d4fddf4e"
+            ]
+        ]
+    },
+    {
+        "id": "a967b2d4480241c9",
+        "type": "random",
+        "z": "36be0e56b969acb8",
+        "name": "Inner Sensor",
+        "low": "0",
+        "high": "1",
+        "inte": "false",
+        "property": "payload",
+        "x": 590,
+        "y": 1540,
+        "wires": [
+            [
+                "80390a71d4fddf4e"
+            ]
+        ]
+    },
+    {
+        "id": "cecbfe474415729d",
+        "type": "function",
+        "z": "36be0e56b969acb8",
+        "name": "Generate seed data",
+        "func": "var bookings_amount = 5;\nvar movements_lower = 3;\nvar movements_upper = 12;\n\nconst areas = [\n    ['Oncology Room 1', 'Oncologist'],\n    ['Neurology Room 1', 'Neurologist'],\n    ['Gastrology Room 1', 'Gastrologist'],\n    ['Radiology Room 1', 'Radiologist'],\n    ['Radiology Room 2', 'Radiologist']\n];\n\nfunction formatTime(time) {\n    var formatted_time = new Date(time).toISOString().slice(0, 19).replace('T', ' ');\n    return formatted_time;\n}\n\nfunction getRandomInt(min, max) {\n    min = Math.ceil(min);\n    max = Math.floor(max);\n    return Math.floor(Math.random() * (max - min) + min);\n}\n\nfunction setBookingTime() {\n    function randomDate(start, end, startHour, endHour) {\n        const date = new Date(+start + Math.random() * (end - start));\n        const hour = Math.floor(Math.random() * (Math.floor(startHour) - Math.ceil(endHour)) + endHour);\n        date.setHours(hour);\n        return date;\n    }\n    function addHour(date) {\n        const end_time = new Date();\n        end_time.setDate(date.getDate());\n        end_time.setHours(date.getHours());\n        end_time.setHours(end_time.getHours() + 1);\n        return end_time;\n    }\n    const today_date = new Date();\n    var past_weeks = new Date();\n    past_weeks.setDate(past_weeks.getDate() - 14);\n    const start_time = randomDate(past_weeks, today_date, 6, 18);\n    const end_time = addHour(start_time);\n    start_time.setMinutes(0, 0, 0);\n    end_time.setMinutes(0, 0, 0);\n    const booking = [start_time, end_time];\n\n    return booking;\n}\n\nfunction setRoomBooker(selection) {\n    var x = Math.random();\n    if (x >= 0.5) {\n        return selection;\n    } else {\n        var booker = getRandomInt(0, areas.length - 1);\n        return booker;\n    };\n}\n\nfunction genMovement(room, role, specificity, time) {\n    var role;\n    var enterTime;\n    var exitTime;\n    var entering;\n\n    function genRole() {\n        var odds = getRandomInt(0, 11);\n        if (odds > specificity) {\n            var x = getRandomInt(0, areas.length - 1);\n            role = areas[x][1];\n            return role;\n        } else {\n            role = role;\n            return role;\n        }\n    }\n\n    function genEnterTime() {\n        var diff = getRandomInt(0, 59);\n        var newDateObj = new Date(time.getTime() + diff * 60000);\n        return newDateObj;\n    }\n\n    function genExitTime(enterTime) {\n        var maxTime = ((60 * 60000) - (enterTime.getTime() - time.getTime()))/60000\n        var minutes = getRandomInt(1, maxTime);\n        var oldDateObj = enterTime;\n        var newDateObj = new Date();\n        newDateObj.setTime(oldDateObj.getTime() + (minutes * 60 * 1000));\n        return newDateObj;\n    }\n\n    room = room;\n    role = genRole();\n    enterTime = genEnterTime();\n    exitTime = genExitTime(enterTime);\n    entering = true;\n\n    var moveIn = [role, room, formatTime(enterTime), entering];\n    var moveOut = [role, room, formatTime(exitTime), entering = false];\n\n    var movements = [moveIn, moveOut];\n\n    return movements;\n}\n\n// Sends many random bookings to SQL node\nfor (let i = 0; i < bookings_amount; i++) {\n    // GENERATE BOOKINGS\n    var selection = getRandomInt(0, areas.length);\n    var room = areas[selection][0];//msg.room = areas[selection][0];\n    var role = areas[selection][1]; //msg.role = areas[setRoomBooker(selection)][1];\n    var booking_times = setBookingTime();\n    var start_time_unformatted = booking_times[0];\n    var start_time = formatTime(booking_times[0]); //msg.start_time = formatTime(booking_times[0]);\n    var end_time = formatTime(booking_times[1]); //msg.end_time = formatTime(booking_times[1]);\n    msg.room = room;\n    msg.role = role;\n    msg.start_time = start_time;\n    msg.end_time = end_time;\n    msg.booking = true;\n    msg.bookingID = i + 1;\n    node.send(msg);\n\n    // GENERATE MOVEMENTS\n    var booking = [room, role, start_time, end_time];\n    // Generate specificity odds for this booking (between approx 40-100%)\n    var specificity = getRandomInt(3, 11);\n    // Generates many random movements for booking\n    var movements = getRandomInt(movements_lower, movements_upper);\n    for (let j = 0; j < movements; j++) {\n        var movement = genMovement(room, role, specificity, start_time_unformatted);\n        msg.role = movement[0][0];\n        msg.room = movement[0][1];\n        // Entry movement\n        msg.time = movement[0][2];\n        msg.entering = true;\n        msg.booking = false;\n        node.send(msg);\n        // Exit movement\n        msg.role = movement[0][0];\n        msg.room = movement[0][1];\n        msg.time = movement[1][2];\n        msg.entering = false;\n        msg.booking = false;\n        node.send(msg);\n    }\n}\n\n//return msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 620,
+        "y": 420,
+        "wires": [
+            [
+                "a88db1cfdf203e64"
+            ]
+        ]
+    },
+    {
+        "id": "4b275494cc7c1675",
+        "type": "inject",
+        "z": "36be0e56b969acb8",
+        "name": "SEED DATABASE",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "4",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 370,
+        "y": 420,
+        "wires": [
+            [
+                "cecbfe474415729d"
+            ]
+        ]
+    },
+    {
+        "id": "54a63f655f84a77c",
+        "type": "postgresql",
+        "z": "36be0e56b969acb8",
+        "name": "PostgreSQL - INSERT movement",
+        "query": "INSERT INTO MOVEMENTS VALUES (\n    DEFAULT,\n    '{{msg.bookingID}}', \n    (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = '{{msg.role}}'),\n    (SELECT ROOM_ID FROM ROOM WHERE ROOM_NAME = '{{msg.room}}'),\n    '{{msg.time}}',\n    '{{msg.entering}}'\n    );",
+        "postgreSQLConfig": "cfeb90dbe9c8f141",
+        "split": false,
+        "rowsPerMsg": "1",
+        "outputs": 1,
+        "x": 1180,
+        "y": 480,
+        "wires": [
+            [
+                "d969a7a107fa27fd"
+            ]
+        ]
+    },
+    {
+        "id": "a88db1cfdf203e64",
+        "type": "switch",
+        "z": "36be0e56b969acb8",
+        "name": "",
+        "property": "booking",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "true"
+            },
+            {
+                "t": "false"
+            }
+        ],
+        "checkall": "false",
+        "repair": false,
+        "outputs": 2,
+        "x": 850,
+        "y": 420,
+        "wires": [
+            [
+                "7450bd7a2ca3659f"
+            ],
+            [
+                "54a63f655f84a77c"
+            ]
+        ]
+    },
+    {
+        "id": "d969a7a107fa27fd",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "insert movement debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1210,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "7450bd7a2ca3659f",
+        "type": "postgresql",
+        "z": "36be0e56b969acb8",
+        "name": "PostgreSQL - INSERT booking",
+        "query": "INSERT INTO BOOKING VALUES (\n    '{{msg.bookingID}}',\n    (SELECT ROOM_ID FROM ROOM WHERE ROOM_NAME = '{{msg.room}}'),\n    '{{msg.start_time}}',\n    '{{msg.end_time}}',\n    (SELECT ROLE_ID FROM ROLE WHERE ROLE_NAME = '{{msg.role}}'));",
+        "postgreSQLConfig": "cfeb90dbe9c8f141",
+        "split": false,
+        "rowsPerMsg": "1",
+        "outputs": 1,
+        "x": 1170,
+        "y": 360,
+        "wires": [
+            [
+                "d61248fd315eae4b"
+            ]
+        ]
+    },
+    {
+        "id": "d61248fd315eae4b",
+        "type": "debug",
+        "z": "36be0e56b969acb8",
+        "name": "insert booking debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1200,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "cfeb90dbe9c8f141",
+        "type": "postgreSQLConfig",
+        "name": "PostgreSQL Connection",
+        "host": "postgresql-server",
+        "hostFieldType": "str",
+        "port": "5432",
+        "portFieldType": "num",
+        "database": "iab330nodered",
+        "databaseFieldType": "str",
+        "ssl": "false",
+        "sslFieldType": "bool",
+        "applicationName": "",
+        "applicationNameType": "str",
+        "max": "10",
+        "maxFieldType": "num",
+        "idle": "1000",
+        "idleFieldType": "num",
+        "connectionTimeout": "10000",
+        "connectionTimeoutFieldType": "num",
+        "user": "dbuser",
+        "userFieldType": "str",
+        "password": "iab3302022",
+        "passwordFieldType": "str"
+    }
+]
